@@ -1,0 +1,43 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: llm-alerts
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: llm.rules
+      rules:
+        - alert: LlmHighP95Latency
+          expr: histogram_quantile(0.95, sum(rate(vllm_request_latency_seconds_bucket[5m])) by (le)) > 4
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "LLM p95 latency high"
+            description: "p95 latency over 4s for 10m"
+        - alert: LlmHigh5xxRate
+          expr: sum(rate(nginx_http_requests_total{status=~"5..",namespace="llm"}[5m])) > 0.2
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "LLM 5xx rate high"
+            description: "5xx rate over 0.2 req/s for 5m"
+        - alert: LlmPodOOMKilled
+          expr: increase(kube_pod_container_status_last_terminated_reason{namespace="llm",reason="OOMKilled"}[10m]) > 0
+          for: 0m
+          labels:
+            severity: critical
+          annotations:
+            summary: "OOMKilled in llm namespace"
+            description: "At least one llm pod terminated by OOM"
+        - alert: GpuUtilizationLow
+          expr: avg(DCGM_FI_DEV_GPU_UTIL{namespace="llm"}) < 20
+          for: 30m
+          labels:
+            severity: info
+          annotations:
+            summary: "Low GPU utilization"
+            description: "Average GPU utilization below 20%"

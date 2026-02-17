@@ -1,0 +1,96 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm
+  namespace: llm
+  labels:
+    app: vllm
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: vllm
+  template:
+    metadata:
+      labels:
+        app: vllm
+    spec:
+      serviceAccountName: vllm
+      nodeSelector:
+        workload: inference-gpu
+      tolerations:
+        - key: "nvidia.com/gpu"
+          operator: "Equal"
+          value: "true"
+          effect: "NoSchedule"
+      containers:
+        - name: vllm
+          image: vllm/vllm-openai:v0.7.2
+          imagePullPolicy: IfNotPresent
+          args:
+            - "--model"
+            - "meta-llama/Llama-3.1-8B-Instruct"
+            - "--host"
+            - "0.0.0.0"
+            - "--port"
+            - "8000"
+            - "--gpu-memory-utilization"
+            - "0.92"
+            - "--max-model-len"
+            - "8192"
+            - "--download-dir"
+            - "/models"
+            - "--served-model-name"
+            - "meta-llama/Llama-3.1-8B-Instruct"
+          env:
+            - name: HUGGING_FACE_HUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: hf-token
+                  key: HF_TOKEN
+            - name: HF_HOME
+              value: /models
+            - name: TRANSFORMERS_CACHE
+              value: /models
+            - name: VLLM_LOGGING_LEVEL
+              value: INFO
+          ports:
+            - containerPort: 8000
+              name: http
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 5
+          resources:
+            requests:
+              cpu: "4"
+              memory: "32Gi"
+              nvidia.com/gpu: "1"
+            limits:
+              cpu: "8"
+              memory: "48Gi"
+              nvidia.com/gpu: "1"
+          volumeMounts:
+            - name: model-cache
+              mountPath: /models
+      volumes:
+        - name: model-cache
+          persistentVolumeClaim:
+            claimName: vllm-model-cache

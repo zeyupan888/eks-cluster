@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: llm-gateway
+  namespace: llm
+  labels:
+    app: llm-gateway
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: llm-gateway
+  template:
+    metadata:
+      labels:
+        app: llm-gateway
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:1.27
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              envsubst '$API_KEY' < /etc/nginx/templates/default.conf.template > /etc/nginx/conf.d/default.conf && \
+              nginx -g 'daemon off;'
+          env:
+            - name: API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: llm-api-key
+                  key: API_KEY
+          ports:
+            - containerPort: 8080
+              name: http
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "1000m"
+              memory: "512Mi"
+          volumeMounts:
+            - name: nginx-template
+              mountPath: /etc/nginx/templates
+      volumes:
+        - name: nginx-template
+          configMap:
+            name: llm-gateway-nginx-template

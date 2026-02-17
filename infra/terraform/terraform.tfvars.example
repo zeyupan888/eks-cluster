@@ -1,0 +1,34 @@
+name        = "llm"
+region      = "us-west-2"
+cluster_version = "1.31"
+
+# Keep private by default; set true + restrict CIDRs only if needed.
+cluster_endpoint_public_access       = false
+cluster_endpoint_public_access_cidrs = ["203.0.113.0/24"]
+
+cpu_node_instance_types = ["m6i.xlarge"]
+cpu_desired_size        = 2
+cpu_min_size            = 2
+cpu_max_size            = 6
+
+gpu_node_instance_types = ["g5.2xlarge"]
+gpu_desired_size        = 1
+gpu_min_size            = 0
+gpu_max_size            = 4
+
+llm_namespace            = "llm"
+llm_service_account_name = "vllm"
+
+# Optional if models are staged in S3
+vllm_model_s3_bucket_arn = "arn:aws:s3:::my-llm-model-bucket"
+
+# Optional DNS automation placeholder (record target updated post-ingress)
+route53_zone_name = "yourdomain.com"
+api_hostname      = "llm.api.yourdomain.com"
+acm_certificate_arn = "arn:aws:acm:us-west-2:111122223333:certificate/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+
+tags = {
+  project = "llm-eks"
+  owner   = "platform"
+  env     = "prod"
+}
