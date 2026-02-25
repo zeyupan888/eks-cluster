@@ -50,7 +50,52 @@ Client -> ALB (HTTPS) -> NGINX auth gateway -> vLLM on GPU -> response.
 
 ## Architecture (high level)
 
-Client -> ALB Ingress (HTTPS) -> API Gateway Pod (auth) -> vLLM Pod (GPU) -> model source/cache.
+```mermaid
+graph TD
+    Client(["Client"])
+
+    subgraph AWS_Cloud["AWS Cloud"]
+        R53["Route 53\nDNS"]
+        ACM["ACM\nTLS Certificate"]
+
+        subgraph VPC["VPC — Multi-AZ"]
+            ALB["AWS Application\nLoad Balancer"]
+
+            subgraph EKS["EKS Cluster"]
+                subgraph CPU_Nodes["CPU Node Group"]
+                    GW["NGINX Gateway Pod\n• API key validation\n• Reverse proxy"]
+                    OBS["Prometheus + Grafana\n• Metrics &amp; alerts"]
+                    AS["HPA / KEDA\n• Autoscaling"]
+                end
+
+                subgraph GPU_Nodes["GPU Node Group  (g5 / p3)"]
+                    vLLM["vLLM Pod\nmeta-llama/Llama-3.1-8B-Instruct"]
+                    PVC["EBS gp3 Volume\nModel Cache"]
+                end
+
+                NP["Network Policies\n• Default deny\n• Allow gateway → vLLM"]
+            end
+        end
+
+        KMS["AWS KMS\nSecret Encryption"]
+        IRSA["IAM / IRSA\nLeast-privilege roles"]
+    end
+
+    HF["Hugging Face\nor S3\nModel source"]
+
+    Client -->|"HTTPS :443"| R53
+    R53 -->|"DNS"| ALB
+    ACM -. "TLS cert" .-> ALB
+    ALB -->|"HTTP"| GW
+    GW -->|"POST /v1/chat/completions"| vLLM
+    vLLM --- PVC
+    vLLM -->|"model pull on first boot"| HF
+    IRSA -. "pod identity" .-> vLLM
+    KMS -. "encrypts k8s secrets" .-> EKS
+    OBS -. "scrapes /metrics" .-> vLLM
+    AS -. "scales" .-> vLLM
+    AS -. "scales" .-> GW
+```
 
 ## Repository structure
 
